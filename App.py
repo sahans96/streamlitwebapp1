@@ -7,10 +7,40 @@ import planetary_computer
 import odc.stac
 import numpy as np
 import rasterio
+from rasterio.transform import from_bounds
 from samgeo import SamGeo
 from shapely.geometry import shape
 import os
 
+# --- HELPER FUNCTION ---
+def save_raster(path, data, bbox, crs="EPSG:4326"):
+    """Helper to save a numpy array as a GeoTIFF using rasterio directly."""
+    # Handle single band (H, W) or multi-band (C, H, W)
+    if len(data.shape) == 2:
+        count = 1
+        height, width = data.shape
+    else:
+        count, height, width = data.shape
+        
+    transform = from_bounds(*bbox, width, height)
+    
+    with rasterio.open(
+        path, 'w',
+        driver='GTiff',
+        height=height,
+        width=width,
+        count=count,
+        dtype=data.dtype,
+        crs=crs,
+        transform=transform,
+    ) as dst:
+        if count == 1:
+            dst.write(data, 1)
+        else:
+            for i in range(count):
+                dst.write(data[i], i + 1)
+
+# --- APP CONFIG ---
 st.set_page_config(layout="wide", page_title="GeoAI Urban Heat")
 
 st.title("🏙️ Urban Heat & Rooftop Analysis")
@@ -21,11 +51,18 @@ if 'm' not in st.session_state:
     m = leafmap.Map(center=[53.4808, -2.2426], zoom=15)
     m.add_basemap("SATELLITE")
     
-    # Add Drawing tools
+    # Add Drawing tools (specifically for the square icon)
     draw = Draw(
         export=True,
         position='topleft',
-        draw_options={'polyline': False, 'rectangle': True, 'polygon': True, 'circle': False, 'marker': False},
+        draw_options={
+            'polyline': False, 
+            'rectangle': True, 
+            'polygon': True, 
+            'circle': False, 
+            'marker': False,
+            'circlemarker': False
+        },
         edit_options={'edit': True}
     )
     draw.add_to(m)
@@ -54,41 +91,45 @@ if process_btn:
                 modifier=planetary_computer.sign_inplace
             )
             
-            # 2. Search for Landsat 8/9 data (includes Thermal and RGB)
+            # 2. Search for Landsat 8/9 data
             search = catalog.search(collections=["landsat-c2-l2"], bbox=bbox, limit=1)
             items = search.item_collection()
             
             if len(items) > 0:
                 item = items[0]
-                # Load Thermal (B10) and RGB (B4, B3, B2)
+                # Load Thermal (lwir11) and RGB bands
                 data = odc.stac.load([item], bands=["lwir11", "red", "green", "blue"], bbox=bbox).isel(time=0)
                 
                 # --- HEAT ANALYSIS ---
-                # Landsat 8/9 LST Formula: (DN * 0.00341802) + 149.0 (Kelvin)
-                #thermal_dn = data.lwir11.values
-                #lst_kelvin = (thermal_dn * 0.00341802) + 149.0
-                #lst_celsius = lst_kelvin - 273.15
                 thermal_dn = data.lwir11.values
+                # Landsat LST Conversion: DN to Celsius
                 lst_celsius = (thermal_dn * 0.00341802 + 149.0) - 273.15
                 
-                # Save Heatmap as temporary TIFF
-                #heatmap_path = "temp_heatmap.tif"
-                #leafmap.numpy_to_cog(lst_celsius, heatmap_path, bounds=bbox)
                 heatmap_path = "temp_heatmap.tif"
-                leafmap.array_to_tiff(lst_celsius, heatmap_path, bounds=bbox)
+                # Use the helper function to save
+                save_raster(heatmap_path, lst_celsius.astype('float32'), bbox)
+                
                 # --- ROOFTOP ANALYSIS (SAM) ---
-                # Create an RGB image for the AI
                 rgb_path = "temp_rgb.tif"
                 red = data.red.values
                 green = data.green.values
                 blue = data.blue.values
-                # Stack RGB bands and normalize for SAM
-                rgb_stack = np.stack([red, green, blue], axis=0) # Shape (3, H, W)
-                leafmap.array_to_tiff(rgb_stack, rgb_path, bounds=bbox)
                 
+                # Stack bands (3, H, W)
+                rgb_stack = np.stack([red, green, blue], axis=0) 
+                
+                # Normalize to 0-255 uint8 for the AI model
+                rgb_min, rgb_max = rgb_stack.min(), rgb_stack.max()
+                if rgb_max > rgb_min:
+                    rgb_stack = ((rgb_stack - rgb_min) / (rgb_max - rgb_min) * 255).astype('uint8')
+                else:
+                    rgb_stack = rgb_stack.astype('uint8')
+                
+                save_raster(rgb_path, rgb_stack, bbox)
+                
+                # Run SAM AI
                 sam = SamGeo(model_type=model_type)
                 mask_path = "rooftop_mask.tif"
-                # This runs the segmentation
                 sam.generate(rgb_path, mask_path, batch=True, foreground=True)
                 
                 # Vectorize the rooftops
@@ -98,16 +139,16 @@ if process_btn:
                 # 3. Display Results
                 st.success(f"Analysis complete for {item.datetime.date()}")
                 
-                # Update the map with results
+                # Create a result map
                 res_map = leafmap.Map(center=[(bbox[1]+bbox[3])/2, (bbox[0]+bbox[2])/2], zoom=16)
                 res_map.add_basemap("SATELLITE")
                 res_map.add_raster(heatmap_path, layer_name="Heat Intensity (C)", colormap="hot")
                 res_map.add_geojson(vector_path, layer_name="Detected Rooftops")
                 
                 st.write("### Results Visualization")
-                st_folium(res_map, width=700, height=500)
+                st_folium(res_map, width=700, height=500, key="result_map")
                 
-                # Download button for the rooftop data
+                # Download button
                 with open(vector_path, "rb") as f:
                     st.download_button("📥 Download Rooftop GeoJSON", f, "rooftops.geojson")
                     

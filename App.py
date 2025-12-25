@@ -65,20 +65,26 @@ if process_btn:
                 
                 # --- HEAT ANALYSIS ---
                 # Landsat 8/9 LST Formula: (DN * 0.00341802) + 149.0 (Kelvin)
+                #thermal_dn = data.lwir11.values
+                #lst_kelvin = (thermal_dn * 0.00341802) + 149.0
+                #lst_celsius = lst_kelvin - 273.15
                 thermal_dn = data.lwir11.values
-                lst_kelvin = (thermal_dn * 0.00341802) + 149.0
-                lst_celsius = lst_kelvin - 273.15
+                lst_celsius = (thermal_dn * 0.00341802 + 149.0) - 273.15
                 
                 # Save Heatmap as temporary TIFF
+                #heatmap_path = "temp_heatmap.tif"
+                #leafmap.numpy_to_cog(lst_celsius, heatmap_path, bounds=bbox)
                 heatmap_path = "temp_heatmap.tif"
-                leafmap.numpy_to_cog(lst_celsius, heatmap_path, bounds=bbox)
-                
+                leafmap.array_to_tiff(lst_celsius, heatmap_path, bounds=bbox)
                 # --- ROOFTOP ANALYSIS (SAM) ---
                 # Create an RGB image for the AI
                 rgb_path = "temp_rgb.tif"
+                red = data.red.values
+                green = data.green.values
+                blue = data.blue.values
                 # Stack RGB bands and normalize for SAM
-                rgb_stack = np.stack([data.red, data.green, data.blue], axis=-1)
-                leafmap.numpy_to_cog(rgb_stack, rgb_path, bounds=bbox)
+                rgb_stack = np.stack([red, green, blue], axis=0) # Shape (3, H, W)
+                leafmap.array_to_tiff(rgb_stack, rgb_path, bounds=bbox)
                 
                 sam = SamGeo(model_type=model_type)
                 mask_path = "rooftop_mask.tif"

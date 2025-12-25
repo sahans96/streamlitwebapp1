@@ -78,6 +78,10 @@ with col2:
     st.subheader("Controls")
     model_type = st.selectbox("AI Model Size", ["vit_b", "vit_l"], index=0, help="vit_b is recommended for the free cloud tier.")
     process_btn = st.button("🚀 Analyze Area")
+    
+@st.cache_resource
+def load_sam_model(model_type):
+    return SamGeo(model_type=model_type)
 
 if process_btn:
     if output and "last_active_drawing" in output and output["last_active_drawing"]:
@@ -128,9 +132,12 @@ if process_btn:
                 save_raster(rgb_path, rgb_stack, bbox)
                 
                 # Run SAM AI
-                sam = SamGeo(model_type=model_type)
+                #sam = SamGeo(model_type=model_type)
+                #mask_path = "rooftop_mask.tif"
+                #sam.generate(rgb_path, mask_path, batch=True, foreground=True)
+                sam = load_sam_model(model_type)
                 mask_path = "rooftop_mask.tif"
-                sam.generate(rgb_path, mask_path, batch=True, foreground=True)
+                sam.generate(rgb_path, mask_path, batch=True, erosion_kernel=(3, 3), foreground=True)
                 
                 # Vectorize the rooftops
                 vector_path = "rooftops.geojson"

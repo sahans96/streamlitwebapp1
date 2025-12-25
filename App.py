@@ -1,6 +1,7 @@
 import streamlit as st
 import leafmap.foliumap as leafmap
 from streamlit_folium import st_folium
+from folium.plugins import Draw
 import pystac_client
 import planetary_computer
 import odc.stac
@@ -15,8 +16,26 @@ st.info("Draw a rectangle on the map to start.")
 
 # Initialize the map in session state
 if 'm' not in st.session_state:
-    m = leafmap.Map(center=[29.9511, -90.0715], zoom=13)
+    m = leafmap.Map(center=[53.4808, -2.2426], zoom=13)
     m.add_basemap("SATELLITE")
+
+# 2. EXPLICITLY add the Draw control (This fixes the missing icon)
+    # This adds the toolbar with the square, polygon, and line tools
+    draw = Draw(
+        export=True,
+        filename='data.geojson',
+        position='topleft',
+        draw_options={
+            'polyline': False,
+            'rectangle': True, # This is your "square" icon
+            'polygon': True,
+            'circle': False,
+            'marker': False,
+            'circlemarker': False,
+        },
+        edit_options={'edit': True}
+    )
+    draw.add_to(m)
     st.session_state.m = m
 
 col1, col2 = st.columns([3, 1])

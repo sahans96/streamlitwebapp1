@@ -1,2 +1,5 @@
-gdal-bin
 libgdal-dev
+libgl1
+libglib2.0-0
+python3-dev
+g++

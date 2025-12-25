@@ -3,7 +3,8 @@ GDAL
 streamlit
 leafmap
 streamlit-folium
-segment-geospatial[samgeo]
+segment-geospatial
+opencv-python-headless
 pystac-client
 planetary-computer
 odc-stac

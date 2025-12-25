@@ -1,7 +1,9 @@
+--find-links=https://girder.github.io/large_image_wheels
+GDAL
 streamlit
 leafmap
 streamlit-folium
-segment-geospatial
+segment-geospatial[samgeo]
 pystac-client
 planetary-computer
 odc-stac

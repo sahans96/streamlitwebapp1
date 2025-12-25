@@ -11,3 +11,5 @@ odc-stac
 rasterio
 geopandas
 shapely
+rio-cogeo
+rio-tiler

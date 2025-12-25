@@ -1,5 +1,10 @@
---find-links=https://girder.github.io/large_image_wheels GDAL
-geopandas
-leafmap
-owslib
 streamlit
+leafmap
+streamlit-folium
+segment-geospatial
+pystac-client
+planetary-computer
+odc-stac
+rasterio
+geopandas
+shapely
